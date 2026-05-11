@@ -1,1 +1,7 @@
 .venv/
+__pycache__/
+*.pyc
+frames/
+uploads/
+*.mp4
+captions.txt
