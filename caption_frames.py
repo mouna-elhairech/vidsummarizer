@@ -1,6 +1,6 @@
 import os
 import re
-from gemma_caption import describe_image_with_gemma
+from qwen_caption import describe_image_with_qwen
 
 def normalize_caption(text):
     text = text.lower().strip()
@@ -24,7 +24,7 @@ def similarity_score(caption1, caption2):
 
 def caption_frames(frames_folder="frames", output_file="captions.txt", similarity_threshold=0.7):
     files = os.listdir(frames_folder)
-    files.sort(key=lambda name: int(name.split("_")[1].split(".")[0]))
+    files.sort()
 
     kept_count = 0
     skipped_count = 0
@@ -35,7 +35,7 @@ def caption_frames(frames_folder="frames", output_file="captions.txt", similarit
         for file_name in files:
             frame_path = os.path.join(frames_folder, file_name)
 
-            caption = describe_image_with_gemma(frame_path)
+            caption = describe_image_with_qwen(frame_path)
 
             is_duplicate = False
             for existing_caption in kept_captions:
