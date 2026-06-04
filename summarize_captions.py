@@ -1,23 +1,86 @@
-from transformers import pipeline
+"""
+Read captions.txt produced by caption_frames.py and write a coherent
+video summary to summary.txt using Gemma 3 4B.
+"""
+import os
+import time
 
-descriptions = []
+from gemma_summary import summarize_text
 
-with open("captions.txt", "r", encoding="utf-8") as f:
-    for line in f:
-        if " : " in line:
-            description = line.split(" : ", 1)[1].strip()
-            descriptions.append(description)
 
-clean_text = ". ".join(descriptions)
+def summarize_captions(
+    captions_file="captions.txt",
+    output_file="summary.txt",
+    verbose=True,
+):
+    """
+    Generate a final video summary from a timestamped captions file.
 
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+    Args:
+        captions_file: path to captions.txt (one timestamped caption per line).
+        output_file: path where the summary will be saved.
+        verbose: print progress.
 
-summary = summarizer(clean_text, max_length=100, min_length=40, do_sample=False)
+    Returns:
+        Result dict with success, summary, output_file, elapsed_sec.
+    """
+    if not os.path.exists(captions_file):
+        return {
+            "success": False,
+            "error": f"Captions file not found: {captions_file}",
+            "summary": "",
+        }
 
-final_summary = summary[0]["summary_text"].strip()
+    with open(captions_file, "r", encoding="utf-8") as f:
+        captions_text = f.read().strip()
 
-if not final_summary.lower().startswith("the video"):
-    final_summary = "The video shows " + final_summary[0].lower() + final_summary[1:]
+    if not captions_text:
+        return {
+            "success": False,
+            "error": "Captions file is empty",
+            "summary": "",
+        }
 
-print("Résumé final :")
-print(final_summary)
+    line_count = len(captions_text.splitlines())
+
+    if verbose:
+        print(f"[summary] Reading {captions_file} ({line_count} captions)")
+        print("[summary] Generating with Gemma 3 4B...")
+
+    start = time.time()
+    try:
+        summary = summarize_text(captions_text)
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Gemma call failed: {e}",
+            "summary": "",
+        }
+    elapsed = time.time() - start
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(summary + "\n")
+
+    if verbose:
+        print(f"[summary] Done in {elapsed:.1f}s\n")
+        print("--- Summary ---")
+        print(summary)
+        print("---------------")
+
+    return {
+        "success": True,
+        "captions_file": captions_file,
+        "output_file": output_file,
+        "elapsed_sec": round(elapsed, 2),
+        "line_count": line_count,
+        "summary": summary,
+    }
+
+
+if __name__ == "__main__":
+    result = summarize_captions()
+    print()
+    if result["success"]:
+        print(f"Summary saved to {result['output_file']}")
+    else:
+        print(f"Error: {result['error']}")
