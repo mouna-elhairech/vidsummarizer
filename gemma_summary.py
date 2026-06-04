@@ -1,78 +1,131 @@
-import requests
-import re
-from collections import Counter
+"""
+Gemma 3 4B summarization via Ollama, with optional streaming.
+"""
+import ollama
 
-STOP_WORDS = {
-    "a", "an", "the", "in", "on", "at", "of", "with", "and", "is", "are",
-    "this", "that", "it", "to", "for", "from", "by", "as", "into", "over",
-    "under", "through", "around", "multiple", "one", "two"
+MODEL = "gemma3:4b"
+
+LANGUAGE_NAMES = {
+    "en": "English",
+    "fr": "French",
 }
 
-def extract_keywords(text):
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9\s]", "", text)
-    words = text.split()
-    return [word for word in words if word not in STOP_WORDS and len(word) > 2]
 
-def filter_stable_captions(captions_text):
-    lines = [line.strip() for line in captions_text.splitlines() if line.strip()]
-
-    all_keywords = []
-    line_keywords = []
-
-    for line in lines:
-        if " : " in line:
-            caption = line.split(" : ", 1)[1].strip()
-        else:
-            caption = line
-
-        keywords = extract_keywords(caption)
-        line_keywords.append((line, keywords))
-        all_keywords.extend(keywords)
-
-    keyword_counts = Counter(all_keywords)
-
-    filtered_lines = []
-
-    for line, keywords in line_keywords:
-        stable_keywords = [word for word in keywords if keyword_counts[word] >= 2]
-
-        if stable_keywords:
-            filtered_lines.append(line)
-
-    if not filtered_lines:
-        filtered_lines = lines
-
-    return "\n".join(filtered_lines)
-
-def summarize_captions_with_gemma(captions_text):
-    filtered_captions = filter_stable_captions(captions_text)
-
-    prompt = f"""
-You are helping summarize the visual content of a video.
-
-Below are descriptions extracted from important frames of the same video:
-
-{filtered_captions}
-
-Write one short, coherent, natural paragraph describing what the video shows.
-Do not mention frame names.
-Do not list disconnected phrases.
-Merge the information into one smooth paragraph.
-Ignore small inconsistent details if they appear only once.
-"""
-
-    payload = {
-        "model": "gemma3:4b",
-        "prompt": prompt,
-        "stream": False
-    }
-
-    response = requests.post(
-        "http://127.0.0.1:11434/api/generate",
-        json=payload,
-        timeout=300
+def _build_system_prompt(language):
+    lang_name = LANGUAGE_NAMES.get(language, "English")
+    return (
+        "You are a video summarizer. "
+        "You will receive a list of timestamped captions extracted from frames "
+        "of a video, in chronological order. "
+        f"Write a clear, natural, factual summary of the video in {lang_name}. "
+        "Use 2 to 4 sentences in flowing prose, not a list. "
+        "Avoid meta-language like 'the video shows' or 'this clip depicts'. "
+        "Do not invent details that are not present in the captions. "
+        f"The output MUST be written in {lang_name} only."
     )
 
-    result = response.json()
-    return result["response"].strip()
+
+def _build_combined_system_prompt(language):
+    lang_name = LANGUAGE_NAMES.get(language, "English")
+    return (
+        "You are a video summarizer. "
+        "You will receive two timestamped sources extracted from a video, "
+        "both in chronological order: "
+        "(1) VISUAL CAPTIONS — descriptions of frames (what is seen), "
+        "(2) AUDIO TRANSCRIPT — what is said in the video. "
+        f"Write a clear, natural, factual summary of the video in {lang_name}. "
+        "Synthesize visual and audio information into a single coherent description; "
+        "prefer the audio for spoken content and the visuals for actions. "
+        "Use 3 to 6 sentences in flowing prose, not a list. "
+        "Avoid meta-language like 'the video shows' or 'this clip depicts'. "
+        "Do not invent details that are not present in the sources. "
+        f"The output MUST be written in {lang_name} only."
+    )
+
+
+def _build_messages(captions_text, transcript_text, language):
+    has_audio = bool(transcript_text and transcript_text.strip())
+    if has_audio:
+        system = _build_combined_system_prompt(language)
+        user = (
+            "VISUAL CAPTIONS:\n"
+            f"{captions_text.strip()}\n\n"
+            "AUDIO TRANSCRIPT:\n"
+            f"{transcript_text.strip()}"
+        )
+        num_ctx = 4096
+        num_predict = 300
+    else:
+        system = _build_system_prompt(language)
+        user = captions_text
+        num_ctx = 2048
+        num_predict = 200
+    return system, user, num_ctx, num_predict
+
+
+def summarize_video(captions_text, transcript_text="", language="en", temperature=0.3):
+    """Blocking summary."""
+    system, user, num_ctx, num_predict = _build_messages(captions_text, transcript_text, language)
+    response = ollama.chat(
+        model=MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        options={
+            "num_ctx": num_ctx,
+            "num_predict": num_predict,
+            "temperature": temperature,
+        },
+    )
+    return response["message"]["content"].strip()
+
+
+def summarize_video_streaming(
+    captions_text,
+    transcript_text="",
+    language="en",
+    temperature=0.3,
+    on_token=None,
+):
+    """
+    Streaming summary. on_token(text_so_far) is called repeatedly as more
+    tokens arrive. Returns the final full text.
+    """
+    system, user, num_ctx, num_predict = _build_messages(captions_text, transcript_text, language)
+
+    full_text = ""
+    stream = ollama.chat(
+        model=MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        options={
+            "num_ctx": num_ctx,
+            "num_predict": num_predict,
+            "temperature": temperature,
+        },
+        stream=True,
+    )
+
+    for chunk in stream:
+        delta = chunk.get("message", {}).get("content", "")
+        if not delta:
+            continue
+        full_text += delta
+        if on_token is not None:
+            try:
+                on_token(full_text)
+            except Exception:
+                pass
+
+    return full_text.strip()
+
+
+# Backwards compatibility
+summarize_text = summarize_video  # alias
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) >= 2:
+        with open(sys.argv[1], encoding="utf-8") as f:
+            text = f.read()
+    else:
+        text = sys.stdin.read()
+    lang = sys.argv[2] if len(sys.argv) >= 3 else "en"
+    print(summarize_video(text, language=lang))
