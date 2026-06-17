@@ -1,0 +1,50 @@
+[
+  {
+    "index": 1,
+    "file": "frames/frame_001.jpg",
+    "timestamp_sec": 0.23,
+    "frame_num": 7,
+    "caption": "A woman in a blue and white striped dress standing in front of a group of people.",
+    "ok": true
+  },
+  {
+    "index": 2,
+    "file": "frames/frame_002.jpg",
+    "timestamp_sec": 4.73,
+    "frame_num": 142,
+    "caption": "A stairwell with a black and white checkered floor.",
+    "ok": true
+  },
+  {
+    "index": 3,
+    "file": "frames/frame_003.jpg",
+    "timestamp_sec": 6.23,
+    "frame_num": 187,
+    "caption": "A set of stairs in a building with a glass railing.",
+    "ok": true
+  },
+  {
+    "index": 4,
+    "file": "frames/frame_004.jpg",
+    "timestamp_sec": 7.73,
+    "frame_num": 232,
+    "caption": "A long hallway with a black and white checkered floor.",
+    "ok": true
+  },
+  {
+    "index": 5,
+    "file": "frames/frame_005.jpg",
+    "timestamp_sec": 11.23,
+    "frame_num": 337,
+    "caption": "A classroom with tables and chairs and a projector screen.",
+    "ok": true
+  },
+  {
+    "index": 6,
+    "file": "frames/frame_006.jpg",
+    "timestamp_sec": 13.27,
+    "frame_num": 398,
+    "caption": "A flat screen television mounted on a wall in a room.",
+    "ok": true
+  }
+]
