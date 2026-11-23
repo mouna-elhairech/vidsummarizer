@@ -5,3 +5,10 @@ frames/
 uploads/
 *.mp4
 captions.txt
+captions.json
+transcript.json
+transcript.txt
+summary.txt
+*.mkv
+*.mp3
+*.wav
